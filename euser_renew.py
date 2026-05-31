@@ -403,32 +403,52 @@ def calculate_operation(left: int, op: str, right: int, raw_text: str, silent: b
 
 
 
-def get_euserv_pin(email: str, email_password: str, imap_server: str) -> Optional[str]:
-    """从邮箱获取 EUserv PIN 码"""
-    try:
-        logger.info(f"正在从邮箱 {email} 获取 PIN 码...")
-        with MailBox(imap_server).login(email, email_password) as mailbox:
-            for msg in mailbox.fetch(AND(from_='no-reply@euserv.com', body='PIN'), limit=1, reverse=True):
-                logger.debug(f"找到邮件: {msg.subject}, 收件时间: {msg.date_str}")
-                
-                match = re.search(r'PIN:\s*\n?(\d{6})', msg.text)
-                if match:
-                    pin = match.group(1)
-                    logger.info(f"✅ 提取到 PIN 码: {pin}")
-                    return pin
-                else:
-                    match_fallback = re.search(r'(\d{6})', msg.text)
-                    if match_fallback:
-                        pin = match_fallback.group(1)
-                        logger.warning(f"⚠️ 备选匹配 PIN 码: {pin}")
+def get_euserv_pin(email: str, email_password: str, imap_server: str,
+                   max_retries: int = 6, retry_interval: int = 5) -> Optional[str]:
+    """从邮箱获取 EUserv PIN 码（带轮询重试）
+
+    因 PIN 邮件可能有延迟，会按 retry_interval 秒间隔最多重试 max_retries 次。
+
+    Args:
+        email: 邮箱地址
+        email_password: 邮箱密码
+        imap_server: IMAP 服务器地址
+        max_retries: 最大重试次数（默认 6 次）
+        retry_interval: 每轮间隔秒数（默认 5 秒）
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            if attempt > 1:
+                logger.info(f"PIN 邮件尚未到达，{retry_interval} 秒后第 {attempt}/{max_retries} 次重试...")
+                time.sleep(retry_interval)
+
+            logger.info(f"正在从邮箱 {email} 获取 PIN 码（第 {attempt}/{max_retries} 次）...")
+            with MailBox(imap_server).login(email, email_password) as mailbox:
+                for msg in mailbox.fetch(AND(from_='no-reply@euserv.com', body='PIN'), limit=1, reverse=True):
+                    logger.debug(f"找到邮件: {msg.subject}, 收件时间: {msg.date_str}")
+
+                    match = re.search(r'PIN:\s*\n?(\d{6})', msg.text)
+                    if match:
+                        pin = match.group(1)
+                        logger.info(f"✅ 提取到 PIN 码: {pin}")
                         return pin
-                    
-            logger.warning("❌ 未找到符合条件的 EUserv 邮件")
+                    else:
+                        match_fallback = re.search(r'(\d{6})', msg.text)
+                        if match_fallback:
+                            pin = match_fallback.group(1)
+                            logger.warning(f"⚠️ 备选匹配 PIN 码: {pin}")
+                            return pin
+
+        except Exception as e:
+            logger.warning(f"第 {attempt} 次获取 PIN 时出错: {e}")
+            if attempt < max_retries:
+                time.sleep(retry_interval)
+                continue
+            logger.error(f"获取 PIN 码失败（已重试 {max_retries} 次）")
             return None
 
-    except Exception as e:
-        logger.error(f"获取 PIN 码时发生错误: {e}", exc_info=True)
-        return None
+    logger.warning("❌ 未找到符合条件的 EUserv 邮件")
+    return None
 
 
 class EUserv:
@@ -648,7 +668,7 @@ class EUserv:
 
             current_day = datetime.now().day
             if current_day not in _update_days:
-                return
+                return True  # 非更新日不是失败
 
             logger.info("更新用户信息...")
             try:
@@ -793,6 +813,7 @@ class EUserv:
                     logger.info("✅ 保存用户信息成功")
                 else:
                     logger.warning(f"⚠️ 保存用户信息失败，response={response.text[:500]}")
+                return True
 
             except Exception as e:
                 logger.error(f"❌ 更新用户信息异常: {e}", exc_info=True)
@@ -898,9 +919,8 @@ class EUserv:
                 logger.error("❌ PIN发送请求失败")
                 return False
             
-            # 步骤3: 获取 PIN
-            logger.debug("步骤3: 等待并获取 PIN 码...")
-            time.sleep(8)
+            # 步骤3: 获取 PIN（内部有轮询重试，不再硬等）
+            logger.debug("步骤3: 获取 PIN 码...")
             pin = get_euserv_pin(
                 self.config.email_pin,
                 self.config.email_password,
@@ -1099,8 +1119,9 @@ def process_account(account_config: AccountConfig, global_config: GlobalConfig) 
             result['error_type'] = 'login'
             return result
         
-        # 更新用户信息
-        euserv.update_info()
+        # 更新用户信息（不影响续期主流程）
+        if not euserv.update_info():
+            logger.warning(f"⚠️ 账号 {account_config.email} 更新用户信息失败，续期流程继续")
 
         # 获取服务器列表
         servers = euserv.get_servers()
