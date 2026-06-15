@@ -6,6 +6,7 @@ EUserv 自动续期脚本 - 多账号多线程版本
 """
 
 import os
+import hashlib
 
 import sys
 import io
@@ -464,7 +465,7 @@ class EUserv:
         self.c_id = None
         # 每个账号对应一个独立的 cookie 文件
         os.makedirs(self.COOKIE_DIR, exist_ok=True)
-        safe_name = re.sub(r'[^\w@.-]', '_', config.email)
+        safe_name = hashlib.md5(config.email.encode()).hexdigest()
         self.cookie_file = os.path.join(self.COOKIE_DIR, f"{safe_name}.json")
         # 初始化时尝试加载已保存的 Cookie（让服务器识别为受信任设备，跳过 PIN）
         self._load_cookies()
@@ -1259,18 +1260,22 @@ def main():
                 if can_renew_date:
                     logger.info(f"    订单 {order_id}: 可续期日期 {can_renew_date}")
 
-    # 只有存在需要通知的事件时才发送
+    # 只有存在需要通知的事件时才发送（异步，不阻塞主流程）
     if notify_parts:
         header = f"<b>🔄 EUserv 续期通知</b>\n时间: {time_str}\n"
         message = header + "\n\n".join(notify_parts)
-        send_notification("EUserv 续期通知", message, GLOBAL_CONFIG)
+        threading.Thread(
+            target=send_notification,
+            args=("EUserv 续期通知", message, GLOBAL_CONFIG),
+            daemon=True
+        ).start()
     else:
         logger.info("✅ 本次无续期操作，无需发送通知")
     
     logger.info("\n" + "=" * 60)
     logger.info("执行完成")
     logger.info("=" * 60)
-    os._exit(0)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
