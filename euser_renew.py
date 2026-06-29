@@ -16,7 +16,7 @@ import time
 import threading
 import logging
 from typing import Dict, List, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PIL import Image
@@ -405,10 +405,12 @@ def calculate_operation(left: int, op: str, right: int, raw_text: str, silent: b
 
 
 def get_euserv_pin(email: str, email_password: str, imap_server: str,
-                   max_retries: int = 6, retry_interval: int = 5) -> Optional[str]:
-    """从邮箱获取 EUserv PIN 码（带轮询重试）
+                   max_retries: int = 6, retry_interval: int = 5,
+                   max_age_seconds: int = 90) -> Optional[str]:
+    """从邮箱获取 EUserv PIN 码（带轮询重试 + 时效性校验）
 
     因 PIN 邮件可能有延迟，会按 retry_interval 秒间隔最多重试 max_retries 次。
+    只接受 max_age_seconds 秒内发送的 PIN，避免拿到旧 PIN 导致续期失败。
 
     Args:
         email: 邮箱地址
@@ -416,7 +418,9 @@ def get_euserv_pin(email: str, email_password: str, imap_server: str,
         imap_server: IMAP 服务器地址
         max_retries: 最大重试次数（默认 6 次）
         retry_interval: 每轮间隔秒数（默认 5 秒）
+        max_age_seconds: 最大 PIN 邮件时效（默认 90 秒，超过则跳过等待新邮件）
     """
+    cutoff = datetime.now() - timedelta(seconds=max_age_seconds)
     for attempt in range(1, max_retries + 1):
         try:
             if attempt > 1:
@@ -427,6 +431,12 @@ def get_euserv_pin(email: str, email_password: str, imap_server: str,
             with MailBox(imap_server).login(email, email_password) as mailbox:
                 for msg in mailbox.fetch(AND(from_='no-reply@euserv.com', body='PIN'), limit=1, reverse=True):
                     logger.debug(f"找到邮件: {msg.subject}, 收件时间: {msg.date_str}")
+
+                    # ★ 时效性校验：跳过旧邮件，等新的 PIN 邮件
+                    msg_date = msg.date
+                    if msg_date and msg_date.replace(tzinfo=None) < cutoff:
+                        logger.info(f"PIN 邮件时间 {msg_date} 超过 {max_age_seconds}s，可能为旧 PIN，等待新邮件...")
+                        continue
 
                     match = re.search(r'PIN:\s*\n?(\d{6})', msg.text)
                     if match:
@@ -1260,15 +1270,11 @@ def main():
                 if can_renew_date:
                     logger.info(f"    订单 {order_id}: 可续期日期 {can_renew_date}")
 
-    # 只有存在需要通知的事件时才发送（异步，不阻塞主流程）
+    # 发送通知（同步调用，确保发送完成再退出）
     if notify_parts:
         header = f"<b>🔄 EUserv 续期通知</b>\n时间: {time_str}\n"
         message = header + "\n\n".join(notify_parts)
-        threading.Thread(
-            target=send_notification,
-            args=("EUserv 续期通知", message, GLOBAL_CONFIG),
-            daemon=True
-        ).start()
+        send_notification("EUserv 续期通知", message, GLOBAL_CONFIG)
     else:
         logger.info("✅ 本次无续期操作，无需发送通知")
     
