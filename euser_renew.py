@@ -619,12 +619,13 @@ class EUserv:
             if 'PIN that you receive via email' in response.text:
                 self.c_id = soup.find("input", {"name": "c_id"})["value"]
                 logger.info("⚠️ 需要 PIN 验证（首次登录或 Cookie 已失效）")
-                time.sleep(3)
+                time.sleep(8)  # ★ 等邮件送达
 
                 pin = get_euserv_pin(
                     self.config.email_pin,
                     self.config.email_password,
-                    self.config.imap_server
+                    self.config.imap_server,
+                    max_age_seconds=60  # ★ 只接受最近 60 秒内的 PIN
                 )
 
                 if not pin:
