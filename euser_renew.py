@@ -929,13 +929,18 @@ class EUserv:
             if resp2.status_code != 200:
                 logger.error("❌ PIN发送请求失败")
                 return False
-            
-            # 步骤3: 获取 PIN（内部有轮询重试，不再硬等）
+
+            # ★ 等待 PIN 邮件送达邮箱（IMAP 延迟通常 5-15 秒）
+            logger.info("⏳ 等待 PIN 邮件送达...（15 秒）")
+            time.sleep(15)
+
+            # 步骤3: 获取 PIN（内部有轮询重试）
             logger.debug("步骤3: 获取 PIN 码...")
             pin = get_euserv_pin(
                 self.config.email_pin,
                 self.config.email_password,
-                self.config.imap_server
+                self.config.imap_server,
+                max_age_seconds=60  # ★ 只接受最近 60 秒内的 PIN
             )
             
             if not pin:
