@@ -1,8 +1,10 @@
 name: EUserv Daily Renew
 
 on:
+  push:
+    branches: [main]
   schedule:
-    - cron: '0 12 * * *' # 北京时间晚上8点（UTC 北京时区+8）
+    - cron: '0 12 * * *'
   workflow_dispatch:
 
 permissions:
@@ -33,7 +35,6 @@ jobs:
           EUSERV_EMAIL2: ${{ secrets.EUSERV_EMAIL2 }}
           EUSERV_PASSWORD2: ${{ secrets.EUSERV_PASSWORD2 }}
           EMAIL_PASS2: ${{ secrets.EMAIL_PASS2 }}
-          EUSERV_EMAIL3: ${{ secrets.EUSERV_EMAIL3 }}
           EUSERV_PASSWORD3: ${{ secrets.EUSERV_PASSWORD3 }}
           EMAIL_PASS3: ${{ secrets.EMAIL_PASS3 }}
           EUSERV_EMAIL4: ${{ secrets.EUSERV_EMAIL4 }}
