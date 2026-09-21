@@ -187,9 +187,11 @@ def should_send_manual_reminder(
     state: Dict,
     account_email: str,
     order_id: str,
-    interval_days: int = PAID_REMINDER_INTERVAL_DAYS,
+    interval_days: Optional[int] = None,
 ) -> bool:
     """同一账号/合同的人工处理提醒按间隔去重。"""
+    if interval_days is None:
+        interval_days = PAID_REMINDER_INTERVAL_DAYS
     key = f"{account_email}:{order_id}"
     last_value = state.get("manual_reminders", {}).get(key)
     if not last_value:
