@@ -1,13 +1,27 @@
 name: EUserv Daily Renew
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'last_run.txt'
+      - 'notification_state.json'
   schedule:
-    - cron: '0 12 * * *' # 北京时间晚上8点（UTC 北京时区+8）
+    - cron: '0 12 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: euserv-renew-main
+  cancel-in-progress: true
 
 jobs:
   renew:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,6 +30,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |
@@ -24,35 +40,59 @@ jobs:
 
       - name: Run EUserv renew script
         env:
-          # 账号 1（必填）
+          # Primary account
           EUSERV_EMAIL: ${{ secrets.EUSERV_EMAIL }}
           EUSERV_PASSWORD: ${{ secrets.EUSERV_PASSWORD }}
+          EUSERV_TOTP_SECRET: ${{ secrets.EUSERV_TOTP_SECRET }}
+          EMAIL_PIN: ${{ secrets.EMAIL_PIN }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          # 账号 2~5（可选，不配置则自动跳过）
+
+          # Optional additional accounts
           EUSERV_EMAIL2: ${{ secrets.EUSERV_EMAIL2 }}
           EUSERV_PASSWORD2: ${{ secrets.EUSERV_PASSWORD2 }}
+          EMAIL_PIN2: ${{ secrets.EMAIL_PIN2 }}
           EMAIL_PASS2: ${{ secrets.EMAIL_PASS2 }}
+
           EUSERV_EMAIL3: ${{ secrets.EUSERV_EMAIL3 }}
           EUSERV_PASSWORD3: ${{ secrets.EUSERV_PASSWORD3 }}
+          EMAIL_PIN3: ${{ secrets.EMAIL_PIN3 }}
           EMAIL_PASS3: ${{ secrets.EMAIL_PASS3 }}
+
           EUSERV_EMAIL4: ${{ secrets.EUSERV_EMAIL4 }}
           EUSERV_PASSWORD4: ${{ secrets.EUSERV_PASSWORD4 }}
+          EMAIL_PIN4: ${{ secrets.EMAIL_PIN4 }}
           EMAIL_PASS4: ${{ secrets.EMAIL_PASS4 }}
+
           EUSERV_EMAIL5: ${{ secrets.EUSERV_EMAIL5 }}
           EUSERV_PASSWORD5: ${{ secrets.EUSERV_PASSWORD5 }}
+          EMAIL_PIN5: ${{ secrets.EMAIL_PIN5 }}
           EMAIL_PASS5: ${{ secrets.EMAIL_PASS5 }}
-          # 通知（可选）
+
+          # Safety policy
+          AUTO_RENEW_CONTRACTS: ${{ secrets.AUTO_RENEW_CONTRACTS }}
+          PAID_REMINDER_INTERVAL_DAYS: ${{ vars.PAID_REMINDER_INTERVAL_DAYS || '7' }}
+          MAX_LOGIN_RETRIES: '2'
+
+          # Notifications
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           BARK_URL: ${{ secrets.BARK_URL }}
+
         run: python euser_renew.py
 
-# --- action保活 ---
-      - name: Keep Alive Action
+      - name: Persist reminder state and keep workflow active
+        if: always()
         run: |
-          date > last_run.txt
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          date -u > last_run.txt
           git add last_run.txt
-          git commit -m "Keep alive: $(date)" || echo "No changes to commit"
+
+          if [ -f notification_state.json ]; then
+            git add notification_state.json
+          fi
+
+          git commit -m "Keep alive: $(date -u)" || echo "No state changes to commit"
+          git pull --rebase origin main
           git push
