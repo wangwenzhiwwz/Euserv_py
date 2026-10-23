@@ -130,13 +130,14 @@ Fork 后进入自己的仓库。
 
 ## GitHub Actions 运行时间
 
-默认：
+默认每天检查两次：
 
 ```yaml
-cron: '0 12 * * *'
+cron: '5 0 * * *'
+cron: '5 12 * * *'
 ```
 
-即每天 UTC 12:00 自动检查。
+分别为 UTC 00:05 和 12:05，即中国时间约 **08:05 和 20:05**。避开整点可降低 GitHub 定时任务拥堵影响。GitHub Actions 定时任务仍可能延迟，因此可在续期日通过 `Actions → EUserv Daily Renew → Run workflow` 手动触发检查。
 
 也可以在：
 
