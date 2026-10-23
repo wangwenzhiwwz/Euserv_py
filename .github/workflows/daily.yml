@@ -7,7 +7,9 @@ on:
       - 'last_run.txt'
       - 'notification_state.json'
   schedule:
-    - cron: '0 12 * * *'
+    # 每天中国时间 08:05 和 20:05 各检查一次；避开整点，降低 GitHub 定时任务拥堵影响。
+    - cron: '5 0 * * *'
+    - cron: '5 12 * * *'
   workflow_dispatch:
 
 permissions:
