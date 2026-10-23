@@ -265,6 +265,9 @@ PAID_REMINDER_INTERVAL_DAYS = max(
 NOTIFICATION_STATE_FILE = os.getenv(
     "NOTIFICATION_STATE_FILE", "notification_state.json"
 )
+NEXT_RENEWAL_DATE_FILE = os.getenv(
+    "NEXT_RENEWAL_DATE_FILE", "next_renewal_date.txt"
+)
 
 
 def load_accounts_from_env() -> List[AccountConfig]:
@@ -2010,6 +2013,87 @@ def process_account(account_config: AccountConfig, global_config: GlobalConfig) 
     return result
 
 
+def write_next_renewal_date(all_results):
+    """根据 FREE 合同在 EUserv 面板中的日期安排下一次单次运行；失败时次日重试。"""
+    today = datetime.utcnow().date()
+    candidate_dates = []
+    issues = []
+    free_contract_seen = False
+
+    for result in all_results:
+        servers = result.get("servers") or {}
+        metas = result.get("server_meta") or {}
+        renew_by_id = {
+            str(item.get("order_id")): item
+            for item in result.get("renew_results", [])
+        }
+
+        # 登录/读取失败时无法安全确认下一次日期，安排次日重试。
+        if not result.get("success", False) and (
+            not servers or any(meta.get("is_free") for meta in metas.values())
+        ):
+            issues.append(
+                f"账号处理失败（{result.get('error_type') or 'unknown'}）"
+            )
+
+        for order_id, state in servers.items():
+            meta = metas.get(str(order_id), {})
+            if not meta.get("is_free"):
+                continue
+
+            free_contract_seen = True
+            renewal = renew_by_id.get(str(order_id))
+            if renewal:
+                if not renewal.get("success"):
+                    issues.append(f"FREE 合同 {order_id} 续期失败")
+                    continue
+                date_text = renewal.get("next_renew_date") or ""
+            else:
+                date_text = (
+                    state[1]
+                    if isinstance(state, (tuple, list)) and len(state) > 1
+                    else ""
+                )
+
+            if not date_text:
+                issues.append(f"FREE 合同 {order_id} 未解析到下次可续期日期")
+                continue
+
+            try:
+                parsed_date = datetime.strptime(
+                    str(date_text).strip(), "%Y-%m-%d"
+                ).date()
+            except ValueError:
+                issues.append(f"FREE 合同 {order_id} 的日期格式无效")
+                continue
+
+            if parsed_date <= today:
+                issues.append(f"FREE 合同 {order_id} 的日期已到或已过")
+            else:
+                candidate_dates.append(parsed_date)
+
+    if not free_contract_seen:
+        issues.append("未能确认任何 FREE 合同")
+
+    if issues or not candidate_dates:
+        next_date = today + timedelta(days=1)
+        logger.warning(
+            "⚠️ 无法安全确定未来续期日，安排次日重试："
+            + "；".join(issues or ["没有可用日期"])
+        )
+    else:
+        next_date = min(candidate_dates)
+        logger.info(
+            f"📅 已根据 EUserv 面板设置下次运行日期：{next_date.isoformat()}"
+        )
+
+    try:
+        with open(NEXT_RENEWAL_DATE_FILE, "w", encoding="utf-8") as f:
+            f.write(next_date.isoformat() + "\n")
+    except Exception as exc:
+        logger.error(f"❌ 保存下次运行日期失败：{exc}")
+
+
 def main():
     """主函数"""
     logger.info("=" * 60)
@@ -2191,6 +2275,8 @@ def main():
             for order_id, (can_renew, can_renew_date) in servers.items():
                 if can_renew_date:
                     logger.info(f"    订单 {order_id}: 可续期日期 {can_renew_date}")
+
+    write_next_renewal_date(all_results)
 
     if notify_parts:
         has_error = (renew_failure_count + system_failure_count) > 0
