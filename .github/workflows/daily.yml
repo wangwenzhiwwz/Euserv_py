@@ -74,7 +74,54 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           BARK_URL: ${{ secrets.BARK_URL }}
 
-        run: python euser_renew.py
+        run: |
+          rm -f next_renewal_date.txt
+          python euser_renew.py
+
+      - name: Update one-time schedule from EUserv date
+        if: always()
+        run: |
+          set -euo pipefail
+          TODAY="$(date -u +%F)"
+          if [ -s next_renewal_date.txt ]; then
+            NEXT_DATE="$(tr -d '[:space:]' < next_renewal_date.txt)"
+          else
+            NEXT_DATE="$(date -u -d 'tomorrow' +%F)"
+          fi
+
+          if ! python -c 'from datetime import date; import sys; date.fromisoformat(sys.argv[1])' "$NEXT_DATE" >/dev/null 2>&1; then
+            NEXT_DATE="$(date -u -d 'tomorrow' +%F)"
+          fi
+
+          # 若目标日已到或已过，次日重试，避免 cron 落回每年同一天。
+          if [[ "$NEXT_DATE" == "$TODAY" || "$NEXT_DATE" < "$TODAY" ]]; then
+            NEXT_DATE="$(date -u -d 'tomorrow' +%F)"
+          fi
+
+          printf '%s\n' "$NEXT_DATE" > next_renewal_date.txt
+          MONTH="$(date -u -d "$NEXT_DATE" +%-m)"
+          DAY="$(date -u -d "$NEXT_DATE" +%-d)"
+          export NEXT_DATE
+          export CRON="5 0 ${DAY} ${MONTH} *"
+
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(".github/workflows/daily.yml")
+          content = path.read_text(encoding="utf-8")
+          updated, count = re.subn(
+              r"(?m)^(\s*-\s*cron:\s*)'[^']+'\s*$",
+              lambda match: f"{match.group(1)}'{os.environ['CRON']}'",
+              content,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("无法唯一定位 workflow cron 行，停止提交")
+          path.write_text(updated, encoding="utf-8")
+          print(f"Next EUserv scheduled run: {os.environ['NEXT_DATE']} (UTC 00:05)")
+          PY
 
       - name: Persist reminder state and keep workflow active
         if: always()
@@ -83,12 +130,12 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           date -u > last_run.txt
-          git add last_run.txt
+          git add last_run.txt next_renewal_date.txt .github/workflows/daily.yml
 
           if [ -f notification_state.json ]; then
             git add notification_state.json
           fi
 
-          git commit -m "Keep alive: $(date -u)" || echo "No state changes to commit"
+          git commit -m "Schedule next EUserv run: $(cat next_renewal_date.txt)" || echo "No state changes to commit"
           git pull --rebase origin main
           git push
