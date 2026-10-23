@@ -125,12 +125,24 @@ jobs:
 
       - name: Persist reminder state and keep workflow active
         if: always()
+        env:
+          GH_WORKFLOW_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           date -u > last_run.txt
-          git add last_run.txt next_renewal_date.txt .github/workflows/daily.yml
+          git add last_run.txt next_renewal_date.txt
+
+          if [ -n "${GH_WORKFLOW_TOKEN:-}" ]; then
+            # A fine-grained PAT with Contents: write and Workflows: write is required
+            # to push changes to .github/workflows/daily.yml.
+            git remote set-url origin "https://x-access-token:${GH_WORKFLOW_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git add .github/workflows/daily.yml
+          else
+            echo "::warning::GH_WORKFLOW_TOKEN is missing; workflow schedule cannot be updated automatically."
+            git restore -- .github/workflows/daily.yml
+          fi
 
           if [ -f notification_state.json ]; then
             git add notification_state.json
