@@ -76,6 +76,7 @@ Fork 后进入自己的仓库。
 | `EMAIL_PASS` | 是 | 接收续期 PIN 邮箱的 IMAP/应用专用密码 |
 | `EMAIL_PIN` | 否 | 接收 PIN 的邮箱地址；不填则使用 `EUSERV_EMAIL` |
 | `AUTO_RENEW_CONTRACTS` | 推荐 | 允许自动续期的 FREE 合同号，多个用逗号分隔 |
+| `GH_WORKFLOW_TOKEN` | 自动改期必需 | 仅用于更新 `.github/workflows/daily.yml` 的 Fine-grained PAT；需 `Contents: Read and write`、`Workflows: Read and write` |
 | `TG_BOT_TOKEN` | 否 | Telegram Bot Token |
 | `TG_CHAT_ID` | 否 | Telegram Chat ID |
 | `BARK_URL` | 否 | Bark 推送地址 |
@@ -130,18 +131,28 @@ Fork 后进入自己的仓库。
 
 ## GitHub Actions 运行时间
 
-**不再每天定时检查。** 工作流使用单次日期定时：
+**不再每天定时检查。** 工作流按下一次可续期日期安排运行：
 
 - 当前根据 EUserv 面板设置为 **2026-11-21 08:05（中国时间）**，对应 UTC 00:05。
-- 每次运行后，从 FREE 合同的面板状态读取下一次可续期日期，并自动改写 `.github/workflows/daily.yml` 中的 cron。
+- 每次运行后，从 FREE 合同的面板状态读取下一次可续期日期，再自动改写 `.github/workflows/daily.yml` 中的 cron。
 - 如果登录、读取合同或续期失败，自动安排次日重试；只有达到 EUserv 可续期条件时才会提交续期操作。
 - 付费或未知类型合同始终只提醒，不自动续费。
+
+### 启用自动改期所需的权限
+
+GitHub 的默认 `GITHUB_TOKEN` 不能写入工作流文件，因此需要添加一个仓库 Secret：`GH_WORKFLOW_TOKEN`。
+
+1. 在 GitHub 创建 **Fine-grained personal access token**，只授权仓库 `wangwenzhiwwz/Euserv_py`。
+2. 给该 Token 开启 `Contents: Read and write` 和 `Workflows: Read and write`。
+3. 进入 `Settings → Secrets and variables → Actions → New repository secret`，名称填写 `GH_WORKFLOW_TOKEN`，值填写刚创建的 Token。
+
+不要把 Token 发到聊天里。未配置此 Secret 时，本次日期仍会计算，但工作流文件无法自动保存新日期。
 
 也可以在：
 
 `Actions → EUserv Daily Renew → Run workflow`
 
-手动检查。手动运行后，同样会自动更新下一次定时日期。
+手动检查。手动运行后，同样会尝试更新下一次定时日期。
 
 ## 如何判断续期真正成功
 
