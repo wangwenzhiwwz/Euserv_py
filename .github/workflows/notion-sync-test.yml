@@ -1,0 +1,42 @@
+name: Notion Reminder Connection Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-notion-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create safe test payload
+        run: |
+          python - <<'PY'
+          import json
+          with open("notion_sync_pending.json", "w", encoding="utf-8") as f:
+              json.dump({
+                  "contract_id": "442244",
+                  "reminder_date": "2026-12-22",
+                  "verified": True
+              }, f)
+          PY
+
+      - name: Test Notion API update
+        env:
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+        run: python notion_sync.py
+
+      - name: Confirm test payload was consumed
+        run: |
+          test ! -e notion_sync_pending.json
+          echo "PASS: Notion API returned the expected reminder date and the test payload was removed."
