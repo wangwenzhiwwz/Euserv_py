@@ -2278,7 +2278,7 @@ def main():
                 and renewal.get("success") is True
             ):
                 next_date = str(renewal.get("next_renew_date") or "").strip()
-                if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", next_date):
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", next_date):
                     notion_sync_item = {
                         "contract_id": "442244",
                         "reminder_date": next_date,
