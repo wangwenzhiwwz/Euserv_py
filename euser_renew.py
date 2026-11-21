@@ -496,7 +496,8 @@ def calculate_operation(left: int, op: str, right: int, raw_text: str, silent: b
     """
     执行运算并返回结果
     silent: 是否静默模式（不输出日志，用于批量尝试）
-    """    try:
+    """
+    try:
         if op == '+':
             result = left + right
             op_name = '加'
