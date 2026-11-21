@@ -3,7 +3,7 @@ name: EUserv Daily Renew
 on:
   schedule:
     # 单次定时；运行后根据 EUserv 面板日期自动更新。失败时次日重试。
-    - cron: '30 2 21 11 *'
+    - cron: '17 3 21 11 *'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   renew:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -65,7 +65,8 @@ jobs:
           EMAIL_PASS5: ${{ secrets.EMAIL_PASS5 }}
 
           # Safety policy
-          AUTO_RENEW_CONTRACTS: ${{ secrets.AUTO_RENEW_CONTRACTS }}
+          # 默认只允许已确认的 FREE 合同 442244；Secret 可显式覆盖白名单。
+          AUTO_RENEW_CONTRACTS: ${{ secrets.AUTO_RENEW_CONTRACTS || '442244' }}
           PAID_REMINDER_INTERVAL_DAYS: ${{ vars.PAID_REMINDER_INTERVAL_DAYS || '7' }}
           MAX_LOGIN_RETRIES: '2'
 
