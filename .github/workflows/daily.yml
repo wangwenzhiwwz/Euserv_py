@@ -65,8 +65,8 @@ jobs:
           EMAIL_PASS5: ${{ secrets.EMAIL_PASS5 }}
 
           # Safety policy
-          # 默认只允许已确认的 FREE 合同 442244；Secret 可显式覆盖白名单。
-          AUTO_RENEW_CONTRACTS: ${{ secrets.AUTO_RENEW_CONTRACTS || '442244' }}
+          # 固定白名单：仅允许已确认的 FREE 合同 442244 自动续期。
+          AUTO_RENEW_CONTRACTS: '442244'
           PAID_REMINDER_INTERVAL_DAYS: ${{ vars.PAID_REMINDER_INTERVAL_DAYS || '7' }}
           MAX_LOGIN_RETRIES: '2'
 
