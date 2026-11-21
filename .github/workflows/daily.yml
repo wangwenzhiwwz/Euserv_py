@@ -5,8 +5,9 @@ on:
     paths:
       - '.github/trigger-euser-renew'
   schedule:
-    # 单次定时；运行后根据 EUserv 面板日期自动更新。失败时次日重试。
-    - cron: '45 2 21 11 *'
+    # 每日轻量检查；脚本仅在 EUserv 面板给出的日期到达时执行登录/续期。
+    # 不依赖运行时修改 workflow，因此不需要 GH_WORKFLOW_TOKEN 的 Workflows 权限。
+    - cron: '5 0 * * *'
   workflow_dispatch:
 
 permissions:
@@ -32,12 +33,43 @@ jobs:
           cache: 'pip'
           cache-dependency-path: requirements.txt
 
+      - name: Check whether renewal is due
+        id: renewal_gate
+        shell: bash
+        run: |
+          TODAY="$(date -u +%F)"
+          NEXT_DATE=""
+          if [ -s next_renewal_date.txt ]; then
+            NEXT_DATE="$(tr -d '[:space:]' < next_renewal_date.txt)"
+          fi
+
+          # 首次运行或状态文件无效时执行一次，避免因状态损坏而永久跳过。
+          if ! [[ "$NEXT_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || ! date -u -d "$NEXT_DATE" >/dev/null 2>&1; then
+            echo "due=true" >> "$GITHUB_OUTPUT"
+            echo "No valid saved renewal date; running a safety check."
+          elif [ "$GITHUB_EVENT_NAME" != "schedule" ] || [[ "$TODAY" > "$NEXT_DATE" || "$TODAY" == "$NEXT_DATE" ]]; then
+            echo "due=true" >> "$GITHUB_OUTPUT"
+            echo "Renewal check is due: today=$TODAY next=$NEXT_DATE event=$GITHUB_EVENT_NAME"
+          else
+            echo "due=false" >> "$GITHUB_OUTPUT"
+            echo "Not due yet: today=$TODAY next=$NEXT_DATE; skipping login and renewal."
+          fi
+
       - name: Install dependencies
+        if: steps.renewal_gate.outputs.due == 'true'
+        id: install
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Compile-check renewal script
+        if: steps.renewal_gate.outputs.due == 'true'
+        id: syntax_check
+        run: python -m py_compile euser_renew.py
+
       - name: Run EUserv renew script
+        if: steps.renewal_gate.outputs.due == 'true'
+        id: run_renewal
         env:
           # Primary account
           EUSERV_EMAIL: ${{ secrets.EUSERV_EMAIL }}
@@ -79,88 +111,41 @@ jobs:
           BARK_URL: ${{ secrets.BARK_URL }}
 
         run: |
-          rm -f next_renewal_date.txt
           python euser_renew.py
 
-      - name: Update one-time schedule from EUserv date
+      - name: Set retry date when a due run cannot complete
         if: always()
         run: |
           set -euo pipefail
           TODAY="$(date -u +%F)"
-          if [ -s next_renewal_date.txt ]; then
-            NEXT_DATE="$(tr -d '[:space:]' < next_renewal_date.txt)"
-          else
-            NEXT_DATE="$(date -u -d 'tomorrow' +%F)"
+          TOMORROW="$(date -u -d 'tomorrow' +%F)"
+
+          if [ "${{ steps.renewal_gate.outputs.due }}" = "true" ] && { [ "${{ steps.install.outcome }}" != "success" ] || [ "${{ steps.syntax_check.outcome }}" != "success" ] || [ "${{ steps.run_renewal.outcome }}" != "success" ]; }; then
+            printf '%s\n' "$TOMORROW" > next_renewal_date.txt
+            echo "Due run did not complete; retry scheduled for $TOMORROW."
+          elif [ ! -s next_renewal_date.txt ]; then
+            printf '%s\n' "$TOMORROW" > next_renewal_date.txt
+            echo "No renewal date was produced; retry scheduled for $TOMORROW."
           fi
 
-          if ! python -c 'from datetime import date; import sys; date.fromisoformat(sys.argv[1])' "$NEXT_DATE" >/dev/null 2>&1; then
-            NEXT_DATE="$(date -u -d 'tomorrow' +%F)"
+          NEXT_DATE="$(tr -d '[:space:]' < next_renewal_date.txt)"
+          if ! [[ "$NEXT_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || ! date -u -d "$NEXT_DATE" >/dev/null 2>&1; then
+            printf '%s\n' "$TOMORROW" > next_renewal_date.txt
+            echo "Invalid renewal date; retry scheduled for $TOMORROW."
           fi
 
-          # 若目标日已到或已过，次日重试，避免 cron 落回每年同一天。
-          if [[ "$NEXT_DATE" == "$TODAY" || "$NEXT_DATE" < "$TODAY" ]]; then
-            NEXT_DATE="$(date -u -d 'tomorrow' +%F)"
-          fi
-
-          printf '%s\n' "$NEXT_DATE" > next_renewal_date.txt
-          MONTH="$(date -u -d "$NEXT_DATE" +%-m)"
-          DAY="$(date -u -d "$NEXT_DATE" +%-d)"
-          export NEXT_DATE
-          export CRON="5 0 ${DAY} ${MONTH} *"
-
-          python - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          path = Path(".github/workflows/daily.yml")
-          content = path.read_text(encoding="utf-8")
-          updated, count = re.subn(
-              r"(?m)^(\s*-\s*cron:\s*)'[^']+'\s*$",
-              lambda match: f"{match.group(1)}'{os.environ['CRON']}'",
-              content,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("无法唯一定位 workflow cron 行，停止提交")
-          path.write_text(updated, encoding="utf-8")
-          print(f"Next EUserv scheduled run: {os.environ['NEXT_DATE']} (UTC 00:05)")
-          PY
-
-      - name: Persist reminder state and keep workflow active
+      - name: Persist reminder state
         if: always()
-        env:
-          GH_WORKFLOW_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           date -u > last_run.txt
           git add last_run.txt next_renewal_date.txt
-
           if [ -f notification_state.json ]; then
             git add notification_state.json
           fi
 
-          # 暂存本次生成的 workflow cron 修改，先独立保存运行状态。
-          git stash push -m "temporary-euserv-workflow-schedule" -- .github/workflows/daily.yml
-
-          # 用 Actions 自带的 GITHUB_TOKEN 保存状态文件。
           git commit -m "Persist EUserv run state: $(cat next_renewal_date.txt)" || echo "No state changes to commit"
           git pull --rebase origin main
           git push origin HEAD:main
-
-          # 恢复 cron 修改；workflow 文件需要独立 PAT 的 Workflows: write 权限。
-          git stash pop || true
-          if [ -n "${GH_WORKFLOW_TOKEN:-}" ]; then
-            git remote set-url origin "https://x-access-token:${GH_WORKFLOW_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            git add .github/workflows/daily.yml
-            git commit -m "Update next EUserv schedule: $(cat next_renewal_date.txt)" || true
-            if ! git push origin HEAD:main; then
-              echo "::warning::GH_WORKFLOW_TOKEN lacks Workflows: write; state was saved, but schedule was not updated."
-              git fetch origin main
-              git reset --hard origin/main
-            fi
-          else
-            echo "::warning::GH_WORKFLOW_TOKEN is missing; workflow schedule was not updated."
-          fi
