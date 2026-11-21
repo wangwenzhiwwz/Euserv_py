@@ -142,12 +142,16 @@ jobs:
             git add notification_state.json
           fi
 
-          # 先用 Actions 自带的 GITHUB_TOKEN 持久化状态，避免缺少 workflow 权限导致整次任务失败。
+          # 暂存本次生成的 workflow cron 修改，先独立保存运行状态。
+          git stash push -m "temporary-euserv-workflow-schedule" -- .github/workflows/daily.yml
+
+          # 用 Actions 自带的 GITHUB_TOKEN 保存状态文件。
           git commit -m "Persist EUserv run state: $(cat next_renewal_date.txt)" || echo "No state changes to commit"
           git pull --rebase origin main
           git push origin HEAD:main
 
-          # 更新 workflow 需要独立的 PAT：Contents: write + Workflows: write。
+          # 恢复 cron 修改；workflow 文件需要独立 PAT 的 Workflows: write 权限。
+          git stash pop || true
           if [ -n "${GH_WORKFLOW_TOKEN:-}" ]; then
             git remote set-url origin "https://x-access-token:${GH_WORKFLOW_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
             git add .github/workflows/daily.yml
