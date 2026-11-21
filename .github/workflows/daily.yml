@@ -65,7 +65,7 @@ jobs:
       - name: Compile-check renewal script
         if: steps.renewal_gate.outputs.due == 'true'
         id: syntax_check
-        run: python -m py_compile euser_renew.py
+        run: python -m py_compile euser_renew.py notion_sync.py
 
       - name: Run EUserv renew script
         if: steps.renewal_gate.outputs.due == 'true'
