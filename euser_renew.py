@@ -247,8 +247,7 @@ GLOBAL_CONFIG = GlobalConfig(
     telegram_bot_token=os.getenv("TG_BOT_TOKEN"),   # TG 的 API Token
     telegram_chat_id=os.getenv("TG_CHAT_ID"),        # TG 的 User ID
     bark_url=os.getenv("BARK_URL"),                  # iOS Bark 推送，格式：https://api.day.app/your_key/
-    max_workers=int(os.getenv("MAX_WORKERS", 3)),
-    max_login_retries=int(os.getenv("MAX_LOGIN_RETRIES", 5)),
+    max_workers=int(os.getenv("MAX_WORKERS", 3)),    max_login_retries=int(os.getenv("MAX_LOGIN_RETRIES", 5)),
 )
 
 # 自动续期安全策略：
@@ -497,8 +496,7 @@ def calculate_operation(left: int, op: str, right: int, raw_text: str, silent: b
     """
     执行运算并返回结果
     silent: 是否静默模式（不输出日志，用于批量尝试）
-    """
-    try:
+    """    try:
         if op == '+':
             result = left + right
             op_name = '加'
@@ -748,7 +746,6 @@ class EUserv:
             def _current_php_session():
                 values = [c.value for c in self.session.cookies if c.name == 'PHPSESSID' and c.value]
                 return values[-1] if values else None
-
             cookie_sess_id = _current_php_session()
             sess_id_match = re.search(r'sess_id["\']?\s*[:=]\s*["\']?([a-zA-Z0-9]{20,100})["\']?', sess.text)
             if not sess_id_match:
@@ -997,7 +994,6 @@ class EUserv:
                 # ── 修复🔴：新增 c_fname / c_lname ────────────────────────────
                 c_fname = _val('c_fname')
                 c_lname = _val('c_lname')
-
                 # ── 修复🟡：动态读取 c_ustid[]（text + select 各一个）─────────
                 c_ustid_text = [t.get('value', '') for t in soup.find_all('input', {'name': 'c_ustid[]'})]
                 c_ustid_sel  = [
@@ -1247,8 +1243,7 @@ class EUserv:
 
                     # 跟随合同页中可能存在的第二层 Contracts/Orders 导航。
                     csoup = BeautifulSoup(contract_page.text, 'html.parser')
-                    for link2 in csoup.find_all('a', href=True):
-                        label2 = link2.get_text(" ", strip=True).lower()
+                    for link2 in csoup.find_all('a', href=True):                        label2 = link2.get_text(" ", strip=True).lower()
                         if label2 == 'contracts' or 'contracts/ orders' in label2:
                             full2 = requests.compat.urljoin(
                                 "https://support.euserv.com/", link2.get('href')
@@ -1497,7 +1492,6 @@ class EUserv:
         except Exception as e:
             logger.error(f"❌ 获取服务器列表失败: {e}", exc_info=True)
             return {}
-
     def renew_server(self, order_id: str) -> bool:
         """续期服务器，并以控制面板实际状态变化作为唯一成功标准。"""
         logger.info(f"正在续期服务器 {order_id}...")
@@ -1747,8 +1741,7 @@ class EUserv:
                     except ValueError:
                         pass
 
-                # 兼容旧合同表：续期后会显示未来的 "Contract extension possible from"
-                servers_after = self.get_servers()
+                # 兼容旧合同表：续期后会显示未来的 "Contract extension possible from"                servers_after = self.get_servers()
                 if order_id in servers_after:
                     can_renew_after, new_date = servers_after[order_id]
                     if not can_renew_after and new_date:
@@ -1936,10 +1929,8 @@ def process_account(account_config: AccountConfig, global_config: GlobalConfig) 
             meta = euserv.server_meta.get(str(order_id), {})
             product_name = meta.get('product_name', '未知产品')
             is_free = bool(meta.get('is_free'))
-            whitelist_ok = (
-                not AUTO_RENEW_CONTRACTS
-                or str(order_id) in AUTO_RENEW_CONTRACTS
-            )
+            # 白名单必须显式命中；未配置白名单时一律只提醒、不自动续期。
+            whitelist_ok = str(order_id) in AUTO_RENEW_CONTRACTS
 
             if can_renew:
                 if is_free and whitelist_ok:
@@ -1997,8 +1988,7 @@ def process_account(account_config: AccountConfig, global_config: GlobalConfig) 
             else:
                 logger.info(
                     f"✓ 服务器 {order_id} 暂不需要续期"
-                    f"（可续期日期: {can_renew_date or '未知'}；产品: {product_name}）"
-                )
+                    f"（可续期日期: {can_renew_date or '未知'}；产品: {product_name}）"                )
 
         result['success'] = all(item.get('success', False) for item in result['renew_results']) if result['renew_results'] else True
         if result['renew_results'] and not result['success']:
@@ -2105,8 +2095,7 @@ def main():
         logger.info("自动续期合同白名单已启用")
     else:
         logger.warning(
-            "⚠️ 未配置 AUTO_RENEW_CONTRACTS；仍只自动续期明确 FREE 产品，"
-            "建议增加合同号白名单作为第二道保险"
+            "🛡️ 未配置 AUTO_RENEW_CONTRACTS；为安全起见，所有合同仅检查和提醒，不执行自动续期"
         )
     logger.info(f"人工处理提醒去重间隔: {PAID_REMINDER_INTERVAL_DAYS} 天")
     logger.info("=" * 60)
@@ -2248,7 +2237,6 @@ def main():
                 logger.info(f"    {rr['message']}")
                 order_id = escape(str(rr.get('order_id', '未知')))
                 product_name = escape(str(rr.get('product_name', '未知产品')))
-
                 if rr.get('success'):
                     renew_success_count += 1
                     next_date = rr.get('next_renew_date') or '已续期，等待下次检查'
