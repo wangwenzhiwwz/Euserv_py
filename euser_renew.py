@@ -2268,6 +2268,42 @@ def main():
 
     write_next_renewal_date(all_results)
 
+    # Queue Notion reminder sync only after EUserv backend verification confirmed
+    # the explicitly whitelisted FREE contract 442244 was renewed successfully.
+    notion_sync_item = None
+    for account_result in all_results:
+        for renewal in account_result.get("renew_results", []):
+            if (
+                str(renewal.get("order_id")) == "442244"
+                and renewal.get("success") is True
+            ):
+                next_date = str(renewal.get("next_renew_date") or "").strip()
+                if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", next_date):
+                    notion_sync_item = {
+                        "contract_id": "442244",
+                        "reminder_date": next_date,
+                        "verified": True,
+                    }
+                else:
+                    logger.error(
+                        "❌ 合同 442244 后台续期已确认，但未取得有效下次可续期日期；"
+                        "不修改 Notion，需人工检查"
+                    )
+                break
+        if notion_sync_item:
+            break
+
+    if notion_sync_item:
+        try:
+            with open("notion_sync_pending.json", "w", encoding="utf-8") as f:
+                json.dump(notion_sync_item, f, ensure_ascii=False, indent=2)
+            logger.info(
+                "📌 已生成 Notion 提醒同步任务："
+                f"{notion_sync_item['reminder_date']}"
+            )
+        except Exception as exc:
+            logger.error(f"❌ 无法保存 Notion 提醒同步任务：{exc}")
+
     if notify_parts:
         has_error = (renew_failure_count + system_failure_count) > 0
         paid_reminder_count = manual_reminder_count
