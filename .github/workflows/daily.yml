@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: euserv-renew-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   renew:
