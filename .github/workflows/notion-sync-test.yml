@@ -2,6 +2,9 @@ name: Notion Reminder Connection Test
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/trigger-notion-sync-test'
 
 permissions:
   contents: read
