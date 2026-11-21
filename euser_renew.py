@@ -1244,7 +1244,8 @@ class EUserv:
 
                     # 跟随合同页中可能存在的第二层 Contracts/Orders 导航。
                     csoup = BeautifulSoup(contract_page.text, 'html.parser')
-                    for link2 in csoup.find_all('a', href=True):                        label2 = link2.get_text(" ", strip=True).lower()
+                    for link2 in csoup.find_all('a', href=True):
+                        label2 = link2.get_text(" ", strip=True).lower()
                         if label2 == 'contracts' or 'contracts/ orders' in label2:
                             full2 = requests.compat.urljoin(
                                 "https://support.euserv.com/", link2.get('href')
