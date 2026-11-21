@@ -36,7 +36,7 @@ def main():
         return 3
 
     reminder_date = str(item.get("reminder_date", "")).strip()
-    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", reminder_date):
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", reminder_date):
         print("ERROR: Invalid reminder date; refusing to update Notion.")
         return 4
 
