@@ -3,7 +3,7 @@ name: EUserv Daily Renew
 on:
   schedule:
     # 单次定时；运行后根据 EUserv 面板日期自动更新。失败时次日重试。
-    - cron: '17 3 21 11 *'
+    - cron: '45 2 21 11 *'
   workflow_dispatch:
 
 permissions:
