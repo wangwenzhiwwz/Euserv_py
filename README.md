@@ -34,7 +34,7 @@
 
 任何不满足上述条件的合同都不会自动续期。
 
-因此必须配置 `AUTO_RENEW_CONTRACTS`。GitHub Actions 默认仅放行已确认的 FREE 合同 `442244`；如需调整，请通过 Secret 显式设置。示例：
+因此必须配置 `AUTO_RENEW_CONTRACTS`。GitHub Actions 工作流固定仅放行已确认的 FREE 合同 `442244`，不会读取 Secret 扩大白名单。示例：
 
 ```
 123456,234567
@@ -75,7 +75,7 @@ Fork 后进入自己的仓库。
 | `EUSERV_TOTP_SECRET` | 视账号而定 | Authenticator 的 Base32 Setup Key，不是当前 6 位验证码 |
 | `EMAIL_PASS` | 是 | 接收续期 PIN 邮箱的 IMAP/应用专用密码 |
 | `EMAIL_PIN` | 否 | 接收 PIN 的邮箱地址；不填则使用 `EUSERV_EMAIL` |
-| `AUTO_RENEW_CONTRACTS` | 否（Actions 默认 442244） | 允许自动续期的 FREE 合同号，多个用逗号分隔；本地运行未设置时全部只提醒 |
+| `AUTO_RENEW_CONTRACTS` | 本地运行可选 | 本地运行时指定允许自动续期的 FREE 合同号；GitHub Actions 固定只放行 442244 |
 | `GH_WORKFLOW_TOKEN` | 自动改期必需 | 仅用于更新 `.github/workflows/daily.yml` 的 Fine-grained PAT；需 `Contents: Read and write`、`Workflows: Read and write` |
 | `TG_BOT_TOKEN` | 否 | Telegram Bot Token |
 | `TG_CHAT_ID` | 否 | Telegram Chat ID |
