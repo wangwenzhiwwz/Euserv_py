@@ -2,3 +2,4 @@ One-time automatic EUserv renewal repair trigger.
 
 Retry after syntax and persistence fixes: 2026-11-21T03:00:00Z
 Retry after indentation and git-state fixes: 2026-11-21T03:00:00Z
+Validate resilient daily schedule: 2026-11-21T03:10:00Z
