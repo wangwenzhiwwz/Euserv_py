@@ -134,6 +134,12 @@ jobs:
             echo "Invalid renewal date; retry scheduled for $TOMORROW."
           fi
 
+      - name: Sync pending Notion reminder
+        if: always()
+        env:
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+        run: python notion_sync.py
+
       - name: Persist reminder state
         if: always()
         run: |
@@ -145,6 +151,7 @@ jobs:
           if [ -f notification_state.json ]; then
             git add notification_state.json
           fi
+          git add -A -- notion_sync_pending.json || true
 
           git commit -m "Persist EUserv run state: $(cat next_renewal_date.txt)" || echo "No state changes to commit"
           git pull --rebase origin main
