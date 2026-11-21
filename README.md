@@ -29,7 +29,7 @@
 自动续期必须先满足：
 
 1. 产品名称能够明确识别为 **FREE**。
-2. 如果配置了 `AUTO_RENEW_CONTRACTS`，合同号还必须存在于该白名单中。
+2. 合同号必须存在于 `AUTO_RENEW_CONTRACTS` 白名单中；白名单为空时不执行自动续期。
 3. EUserv 当前确实处于可续期状态。
 
 任何不满足上述条件的合同都不会自动续期。
@@ -75,7 +75,7 @@ Fork 后进入自己的仓库。
 | `EUSERV_TOTP_SECRET` | 视账号而定 | Authenticator 的 Base32 Setup Key，不是当前 6 位验证码 |
 | `EMAIL_PASS` | 是 | 接收续期 PIN 邮箱的 IMAP/应用专用密码 |
 | `EMAIL_PIN` | 否 | 接收 PIN 的邮箱地址；不填则使用 `EUSERV_EMAIL` |
-| `AUTO_RENEW_CONTRACTS` | 推荐 | 允许自动续期的 FREE 合同号，多个用逗号分隔 |
+| `AUTO_RENEW_CONTRACTS` | 否（Actions 默认 442244） | 允许自动续期的 FREE 合同号，多个用逗号分隔；本地运行未设置时全部只提醒 |
 | `GH_WORKFLOW_TOKEN` | 自动改期必需 | 仅用于更新 `.github/workflows/daily.yml` 的 Fine-grained PAT；需 `Contents: Read and write`、`Workflows: Read and write` |
 | `TG_BOT_TOKEN` | 否 | Telegram Bot Token |
 | `TG_CHAT_ID` | 否 | Telegram Chat ID |
